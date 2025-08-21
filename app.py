@@ -338,19 +338,19 @@ copy_story_df = pd.DataFrame(
      for s in merged_sentences]
 )
 
-    # Excel export
-    def to_excel_bytes(elig_df, cb_df, tc_df, repo_df, syn_df, copy_story_df, copy_story_variants_df):
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-            elig_df.to_excel(writer, sheet_name="eligible_claims", index=False)
-            cb_df.to_excel(writer, sheet_name="Copy_Bank", index=False)
-            tc_df.to_excel(writer, sheet_name="Theme_Counts", index=False)
-            copy_story_df.to_excel(writer, sheet_name="Copy_Story", index=False)
-            copy_story_variants_df.to_excel(writer, sheet_name="Copy_Story_Variants", index=False)
-            repo_df.to_excel(writer, sheet_name="claims_repository", index=False)
-            syn_df.to_excel(writer, sheet_name="synonyms", index=False)
-        output.seek(0)
-        return output.getvalue()
+# Excel export
+def to_excel_bytes(elig_df, cb_df, tc_df, repo_df, syn_df, copy_story_df, copy_story_variants_df):
+    output = BytesIO()
+     with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        elig_df.to_excel(writer, sheet_name="eligible_claims", index=False)
+        cb_df.to_excel(writer, sheet_name="Copy_Bank", index=False)
+        tc_df.to_excel(writer, sheet_name="Theme_Counts", index=False)
+        copy_story_df.to_excel(writer, sheet_name="Copy_Story", index=False)
+        copy_story_variants_df.to_excel(writer, sheet_name="Copy_Story_Variants", index=False)
+        repo_df.to_excel(writer, sheet_name="claims_repository", index=False)
+        syn_df.to_excel(writer, sheet_name="synonyms", index=False)
+    output.seek(0)
+    return output.getvalue()
 
     copy_story_variants_df = pd.DataFrame({
     'variant': ['headline','paragraph'],
