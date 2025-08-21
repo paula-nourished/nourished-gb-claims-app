@@ -1,5 +1,6 @@
 
 import streamlit as st
+from streamlit.components.v1 import html
 import pandas as pd
 import numpy as np
 import io
@@ -18,7 +19,10 @@ with st.sidebar:
     include_on_hold = st.toggle("Include on-hold botanicals", value=False, help="Usually keep this OFF for GB-authorised only")
     enforce_nrv = st.toggle("Enforce ≥15% NRV", value=False, help="OFF by default as requested (no dosage checks)")
     st.markdown("---")
-    st.header("2) Paste or edit actives")
+    top_k_themes = st.slider('Themes to feature', 1, 4, 3,
+                         help='Controls how many themes appear in the Copy Story (default 3)')
+st.markdown('---')
+st.header("2) Paste or edit actives")
     st.caption("Amounts/units optional (ignored unless NRV is enforced)")
 
 # Load claims repository
@@ -237,19 +241,122 @@ if run:
     st.subheader("Theme Counts")
     st.dataframe(theme_counts, use_container_width=True, height=240)
 
+    # ---------- Copy Story (headline + merged-claims sentences) ----------
+def human_join(items):
+    items = [x for x in items if str(x).strip()]
+    if not items: return ""
+    if len(items) == 1: return items[0]
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+def phrase_for_theme(theme: str) -> str:
+    m = {
+        "Immunity": "immunity",
+        "Energy": "energy",
+        "Cognitive": "cognitive function",
+        "Beauty": "skin, hair and nails",
+        "Bone": "bone health",
+        "Muscle": "muscle function",
+        "Vision": "vision",
+        "Cardio": "heart and blood health",
+        "Digestive": "digestive health",
+    }
+    return m.get(theme, (theme or "").lower())
+
+def after_contributes_to(approved_text: str) -> str:
+    if not isinstance(approved_text, str): return ""
+    low = approved_text.lower()
+    key = "contributes to"
+    i = low.find(key)
+    return approved_text.strip() if i == -1 else approved_text[i+len(key):].strip()
+
+# Top-K themes for the story
+top_themes = theme_counts.sort_values("total_supporting_ingredients", ascending=False)["theme"].tolist()[:top_k_themes]
+
+# Headline
+headline = f"Precision nutrition formulated to support {human_join([phrase_for_theme(t) for t in top_themes])}." if top_themes else ""
+
+# Build merged sentences for each chosen theme
+merged_sentences = []
+for t in top_themes:
+    cb_t = copy_bank[copy_bank["theme"] == t].copy()
+    if cb_t.empty: 
+        continue
+    cb_t = cb_t.sort_values("supporting_ingredient_count", ascending=False)
+    row = cb_t.iloc[0]
+    core = row["claim_core"]
+    approved_text = row["approved_wording_example"]
+    subs = (approved[approved["claim_text_exact"] == approved_text]["substance_canonical"]
+            .dropna().drop_duplicates().tolist())
+    if not subs:
+        subs = (approved[approved["claim_core"] == core]["substance_canonical"]
+                .dropna().drop_duplicates().tolist())
+    subs_sorted = sorted(subs, key=lambda x: x.lower())
+    subject = human_join(subs_sorted)
+    verb = "contributes" if len(subs_sorted) == 1 else "contribute"
+    tail = after_contributes_to(approved_text)
+    sentence = f"{subject} {verb} to {tail}"
+    if not sentence.endswith(('.', '!', '?')):
+        sentence += "."
+    merged_sentences.append({"theme": t, "sentence": sentence, "supporting_ingredient_count": len(subs_sorted)})
+
+st.subheader("Copy Story")
+if headline:
+    st.markdown(f"### {headline}")
+
+# Simple JS copy button
+def copy_button(label: str, text_to_copy: str, key: str):
+    if not isinstance(text_to_copy, str):
+        text_to_copy = ""
+    esc = (text_to_copy.replace("\\", "\\\\")
+                      .replace("'", "\\'")
+                      .replace("\n", "\\n"))
+    html(f"""
+        <button onclick="navigator.clipboard.writeText('{esc}')"
+                style="margin:2px 0;padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fafafa;cursor:pointer;">
+            {label}
+        </button>
+    """, height=40, key=key)
+
+if headline:
+    copy_button('Copy headline', headline, 'copy_headline')
+
+if merged_sentences:
+    st.write("**Merged claims (auto-built from GB-authorised wording):**")
+    for idx, s in enumerate(merged_sentences):
+        st.markdown(f"- {s['sentence']}")
+        copy_button('Copy line', s['sentence'], f'copy_line_{idx}')
+
+# Combined paragraph variant
+copy_paragraph = (headline + " " if headline else "") + " ".join([s["sentence"] for s in merged_sentences])
+if copy_paragraph:
+    copy_button('Copy full paragraph', copy_paragraph, 'copy_full_para')
+
+# Prepare Copy_Story sheet for export
+copy_story_df = pd.DataFrame(
+    [{"headline": headline}] +
+    [{"theme": s["theme"], "sentence": s["sentence"], "supporting_ingredient_count": s["supporting_ingredient_count"]}
+     for s in merged_sentences]
+)
+
     # Excel export
-    def to_excel_bytes(elig_df, cb_df, tc_df, repo_df, syn_df):
+    def to_excel_bytes(elig_df, cb_df, tc_df, repo_df, syn_df, copy_story_df, copy_story_variants_df):
         output = BytesIO()
         with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
             elig_df.to_excel(writer, sheet_name="eligible_claims", index=False)
             cb_df.to_excel(writer, sheet_name="Copy_Bank", index=False)
             tc_df.to_excel(writer, sheet_name="Theme_Counts", index=False)
+            copy_story_df.to_excel(writer, sheet_name="Copy_Story", index=False)
+            copy_story_variants_df.to_excel(writer, sheet_name="Copy_Story_Variants", index=False)
             repo_df.to_excel(writer, sheet_name="claims_repository", index=False)
             syn_df.to_excel(writer, sheet_name="synonyms", index=False)
         output.seek(0)
         return output.getvalue()
 
-    xbytes = to_excel_bytes(elig, copy_bank, theme_counts, repo, syn)
+    copy_story_variants_df = pd.DataFrame({
+    'variant': ['headline','paragraph'],
+    'text': [headline, copy_paragraph]
+})
+xbytes = to_excel_bytes(elig, copy_bank, theme_counts, repo, syn, copy_story_df, copy_story_variants_df)
     st.download_button("Download Excel", data=xbytes, file_name="claims_output.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 st.markdown("---")
