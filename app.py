@@ -23,7 +23,7 @@ with st.sidebar:
                          help='Controls how many themes appear in the Copy Story (default 3)')
 st.markdown('---')
 st.header("2) Paste or edit actives")
-    st.caption("Amounts/units optional (ignored unless NRV is enforced)")
+st.caption("Amounts/units optional (ignored unless NRV is enforced)")
 
 # Load claims repository
 def theme_hint_from_claim(text: str) -> str:
