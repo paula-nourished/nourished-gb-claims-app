@@ -357,7 +357,7 @@ def to_excel_bytes(elig_df, cb_df, tc_df, repo_df, syn_df, copy_story_df, copy_s
     'text': [headline, copy_paragraph]
 })
 xbytes = to_excel_bytes(elig, copy_bank, theme_counts, repo, syn, copy_story_df, copy_story_variants_df)
-    st.download_button("Download Excel", data=xbytes, file_name="claims_output.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+st.download_button("Download Excel", data=xbytes, file_name="claims_output.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 st.markdown("---")
 st.caption("Tip: add more synonyms so ingredient names always map to the right canonical substance (e.g., 'Vit C' → 'Vitamin C').")
